@@ -38,7 +38,7 @@ import (
 var configPath string
 
 func init() {
-	flag.StringVar(&configPath, "c", "config/config.yaml", "set config yaml file path")
+	flag.StringVar(&configPath, "c", "config/config-raft.yaml", "set config yaml file path")
 }
 
 func registerSignal(closeFn func()) {
@@ -65,6 +65,8 @@ func handleSignals(sig os.Signal) (exitNow bool) {
 }
 
 func main() {
+	defer logger.Sync()
+
 	ctx, cancelFn := context.WithCancel(context.Background())
 	// os signal handler
 	shutdownCh := make(chan struct{})
@@ -92,6 +94,15 @@ func main() {
 		logger.Get().With(zap.Error(err)).Error("Failed to validate the config file")
 		return
 	}
+
+	if cfg.Log != nil && cfg.Log.Filename != "" {
+		logger.Get().Info("Logs will be saved to " + cfg.Log.Filename)
+		if err := logger.InitLoggerRotate(cfg.Log.Level, cfg.Log.Filename, cfg.Log.MaxBackups, cfg.Log.MaxAge, cfg.Log.MaxSize, cfg.Log.Compress); err != nil {
+			logger.Get().With(zap.Error(err)).Error("Failed to init the log rotate")
+			return
+		}
+	}
+
 	srv, err := server.NewServer(cfg)
 	if err != nil {
 		logger.Get().With(zap.Error(err)).Error("Failed to create the server")

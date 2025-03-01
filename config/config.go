@@ -49,6 +49,15 @@ type ControllerConfig struct {
 	FailOver *FailOverConfig `yaml:"failover"`
 }
 
+type LogConfig struct {
+	Level      string `yaml:"level"`
+	Filename   string `yaml:"filename"`
+	MaxBackups int    `yaml:"max_backups"`
+	MaxAge     int    `yaml:"max_age"`
+	MaxSize    int    `yaml:"max_size"`
+	Compress   bool   `yaml:"compress"`
+}
+
 const defaultPort = 9379
 
 type Config struct {
@@ -60,6 +69,7 @@ type Config struct {
 	Consul      *consul.Config    `yaml:"consul"`
 	Admin       AdminConfig       `yaml:"admin"`
 	Controller  *ControllerConfig `yaml:"controller"`
+	Log         *LogConfig        `yaml:"log"`
 }
 
 func DefaultFailOverConfig() *FailOverConfig {
