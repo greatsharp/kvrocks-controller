@@ -101,6 +101,8 @@ func InitLoggerRotate(level, filename string, maxBackups, maxAge, maxSize int, c
 
 func Sync() {
 	if zapLogger != nil {
-		zapLogger.Sync()
+		if err := zapLogger.Sync(); err != nil {
+			return
+		}
 	}
 }
