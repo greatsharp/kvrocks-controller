@@ -72,6 +72,8 @@ type Node interface {
 
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON(data []byte) error
+
+	GetClusterNodesString(ctx context.Context) (string, error)
 }
 
 type ClusterNode struct {

@@ -194,9 +194,16 @@ func (c *ClusterChecker) syncClusterToNodes(ctx context.Context) error {
 }
 
 func (c *ClusterChecker) parallelProbeNodes(ctx context.Context, cluster *store.Cluster) {
+	var mu sync.Mutex
+	var latestNodeVersion int64 = 0
+	var latestClusterNodesStr string
+	var wg sync.WaitGroup
+
 	for i, shard := range cluster.Shards {
 		for _, node := range shard.Nodes {
+			wg.Add(1)
 			go func(shardIdx int, n store.Node) {
+				defer wg.Done()
 				log := logger.Get().With(
 					zap.String("id", n.ID()),
 					zap.Bool("is_master", n.IsMaster()),
@@ -228,10 +235,37 @@ func (c *ClusterChecker) parallelProbeNodes(ctx context.Context, cluster *store.
 						zap.Int64("node.version", version),
 						zap.Int64("clusterName.version", clusterVersion),
 					).Warn("The node is in a higher version")
+					mu.Lock()
+					if version > latestNodeVersion {
+						latestNodeVersion = version
+						clusterNodesStr, errX := n.GetClusterNodesString(ctx)
+						if errX != nil {
+							log.With(zap.String("node", node.ID()), zap.Error(errX)).Error("Failed to get the cluster nodes info from node")
+						}
+						latestClusterNodesStr = clusterNodesStr
+					}
+					mu.Unlock()
 				}
 				c.resetFailureCount(n.ID())
 			}(i, node)
 		}
+	}
+
+	wg.Wait()
+	if latestNodeVersion > cluster.Version.Load() {
+		latestClusterInfo, err := store.ParseCluster(latestClusterNodesStr)
+		if err != nil {
+			logger.Get().With(zap.String("cluster", latestClusterNodesStr), zap.Error(err)).Error("Failed to parse the cluster info")
+			return
+		}
+		latestClusterInfo.Name = cluster.Name
+		latestClusterInfo.SetPassword(cluster.Shards[0].Nodes[0].Password())
+		err = c.clusterStore.UpdateCluster(ctx, c.namespace, latestClusterInfo)
+		if err != nil {
+			logger.Get().With(zap.String("cluster", latestClusterNodesStr), zap.Error(err)).Error("Failed to update the cluster info")
+			return
+		}
+		logger.Get().With(zap.Any("latestClusterInfo", latestClusterInfo)).Info("Refresh latest cluster info to all nodes")
 	}
 }
 
